@@ -13,6 +13,7 @@ import com.typesafe.config.*
 import com.typesafe.config.ConfigFactory
 import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.Map
+import scala.util.matching.Regex
 
 import scala.runtime.Nothing$
 
@@ -56,7 +57,7 @@ object MapReduceProgram:
           if(token != "log")
             if(count == 1 || count == 3 || count == 7)
               ListOfLine += token
-              println(token + " Number: " + count)
+              // println(token + " Number: " + count)
             if (token == "DEBUG" || token == "ERROR")
               count += 1
             if(count == 7) {
@@ -67,13 +68,15 @@ object MapReduceProgram:
             fillerOut = -1
         }
       fillerOut += 1
-      // val temp = conf.getInt("group.split")
+      // val addOne = conf.getInt("group.split")
 
 
 
   class Reduce extends MapReduceBase with Reducer[Text, IntWritable, Text, IntWritable]:
     override def reduce(key: Text, values: util.Iterator[IntWritable], output: OutputCollector[Text, IntWritable], reporter: Reporter): Unit =
       val timer = conf.getInt("predefined.TimeInterval")
+      val pat: String = conf.getString("predefined.Pattern")
+      val Pattern: Regex = pat.r
 
       // cur to keep track of our intervals
       var cur: Long = 0
@@ -99,26 +102,47 @@ object MapReduceProgram:
         }
         count += 1
       }
+
       //keep track of where the numbers are at
       var index: Int = 0
-      val mLevel = scala.collection.mutable.Map()
-
+      val mLevel: scala.collection.mutable.Map[String, Int] = scala.collection.mutable.Map("ERROR" -> 0, "INFO" -> 0, "DEBUG" -> 0, "WARN" -> 0)
+      var interval: Int = 1 // which interval they are on
+      var title = new Text("")
       ListOfLine.foreach { value =>
         // means we have hit the time format
         if(index % 3 == 0) {
           // we go beyond the timer we are in a new interval
           if(toMS(index) - cur <= timer)  {
-
+            // nothing
           } else {
             cur = toMS(index) // a new interval
-          }
-          println(toMS(index))
-        }
 
+            interval += 1
+          }
+          // println(toMS(index))
+        }
+        // check the message level && string
+        if(index % 3 == 1) {
+          // println(ListOfLine(index + 1))
+          val temp1 = ListOfLine(index + 1)
+          // println(Pattern.findFirstIn(temp1))
+          // print(ListOfLine(index + 1))
+          if(Pattern.findAllIn(temp1).isEmpty == false)
+            // to change the number if
+            val addOne = mLevel.get(value)
+            mLevel.updateWith(value) {
+              case Some(addOne) => Some(addOne + 1)
+              case None => Some(1)
+            }
+            println(temp1 + " Matched")
+        }
         index += 1
       }
+
+
+
       val sum = values.asScala.reduce((valueOne, valueTwo) => new IntWritable(valueOne.get() + valueTwo.get()))
-      output.collect(key,  new IntWritable(sum.get()))
+      output.collect(key,  new IntWritable())
 
   // this will help to calculate the time to ms
   def toMS(index : Int) : Long = {
